@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Office Environment Training</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        body {
+            background-color: #99BADD; /* Carolina blue */
+        }
+
+        #main__main-container {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            justify-content: space-between;
+            height: 100vh;
+            padding: 20px;
+        }
+
+        #video-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+        }
+
+        #main__video {
+            width: 100%;
+            height: auto;
+        }
+
+        #main__video-button {
+            background-color: red;
+            height: 50px;
+            width: 50px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 50px;
+            font-size: .75em;
+            transition-property: box-shadow;
+            transition-duration: .3s;
+            cursor: pointer;
+            box-shadow: gray 0 0 5px 5px;
+            margin-top: 10px;
+        }
+
+        #content-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+            justify-content: center;
+        }
+
+        audio {
+            width: 100%;
+            margin: 20px 0;
+        }
+
+        .chat-container {
+            max-width: 600px;
+            width: 100%;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+
+        .response {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+
+        .conversation-log {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            height: 200px;
+            overflow-y: scroll;
+        }
+    </style>
+</head>
+<body>
+    <div id="main__main-container">
+        <div id="video-container">
+            <video id="main__video" playsinline autoplay loop muted="muted">Can't load video :(</video>
+            <div id="main__video-button">Record</div>
+        </div>
+        <div id="content-container">
+            <audio id="audio" controls>
+                Your browser does not support the audio element.
+            </audio>
+            <div class="chat-container">
+                <div class="response" id="bot-response">
+                    <!-- Bot's response will appear here -->
+                </div>
+                <div class="conversation-log" id="conversation-log">
+                    <!-- Conversation log will appear here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const videoButton = document.getElementById('main__video-button');
+        const video = document.getElementById('main__video');
+        const audio = document.getElementById('audio');
+        const response = document.getElementById('bot-response');
+        const conversationLog = document.getElementById('conversation-log');
+
+        const content = 'You are an office superior role-playing scenario for the purpose of training nursing students. As an office superior, you should ask for a variety of things that require the nursing student to say some form of \'no\'. Do not take on the role of a nurse or provide medical advice. Instead, insist or ask in different ways if your request is declined, while maintaining a realistic office superior perspective. Dont stick too rigidly to the script. If they ask questions, respond in a realistic way, but bring the conversation back to your request.';
+
+        const finalRequest = initializeConversation();
+        
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        videoButton.onclick = () => {
+            switch (videoButton.textContent) {
+                case 'Record':
+                    videoButton.textContent = 'Stop';
+                    startRecording();
+                    break;
+                case 'Stop':
+                    videoButton.textContent = 'Record';
+                    stopRecording();
+                    break;
+            }
+        }
+        
+        async function init() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: { exact: true },
+                        noiseSuppression: { exact: true },
+                        autoGainControl: { exact: false },
+                        sampleRate: 44100
+                    },
+                    video: true
+                });
+                startWebCamera(stream);
+            } catch (err) {
+                console.log('Error retrieving media device.');
+                console.log(err);
+            }
+        }
+        
+        function startWebCamera(stream) {
+            video.srcObject = stream;
+            window.stream = stream;
+        }
+        
+        function startRecording() {
+            if (video.srcObject === null) {
+                video.srcObject = window.stream;
+            }
+            mediaRecorder = new MediaRecorder(window.stream, {mimeType: 'video/webm; codecs=vp8,opus'});
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+            mediaRecorder.start();
+        }
+        
+        function stopRecording() {
+            mediaRecorder.stop();
+            mediaRecorder.onstop = () => {
+                const videoBlob = new Blob(recordedChunks, {type: 'video/webm'});
+                const videoURL = URL.createObjectURL(videoBlob);
+                video.srcObject = null;
+                saveVideo(videoBlob);
+                recordedChunks = [];
+            };
+        }
+
+        async function saveVideo(videoBlob) {
+            const formData = new FormData();
+            formData.append('video', videoBlob, 'video.webm');
+    
+            try {
+                await fetch('http://localhost:5000/save-video', {
+                    method: 'POST',
+                    body: formData
+                });
+                // Fetch the audio after saving the video
+                await fetchAudio();
+            } catch (err) {
+                console.error('Error saving video:', err);
+            }
+        }
+
+        async function fetchAudio() {
+            try {
+                const response = await fetch('http://localhost:5000/get-audio-from-video');
+                if (response.ok) {
+                    const audioBlob = await response.blob();
+                    audioToText(audioBlob);
+                } else {
+                    console.error('Failed to fetch audio');
+                }
+            } catch (err) {
+                console.error('Error fetching audio:', err);
+            }
+        }
+
+        async function audioToText(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'audio.wav');
+            
+            try {
+                const response = await fetch('http://localhost:5000/audio-to-text', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Transcription failed');
+                }
+
+                const transcribeData = await response.json();
+                if (transcribeData.error) {
+                    throw new Error(transcribeData.error);
+                }
+
+                const transcription = transcribeData.transcription;
+                askGpt(transcription, content);
+            } catch (error) {
+                print(error);
+            }
+        }
+
+        async function askGpt(transcription, content) {
+            const systemMessage = {
+                role: 'system',
+                content: content
+            };
+            const messages = [systemMessage, { role: 'user', content: finalRequest }, { role: 'user', content: transcription }];
+            
+            try {
+                const response = await fetch('http://localhost:5000/ask-gpt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ messages })
+                });
+
+                if (!response.ok) {
+                    throw new Error('GPT response failed');
+                }
+
+                const data = await response.json();
+
+                if (data && data.response) {
+                    const botResponse = data.response;
+                    console.log('Bot response:', botResponse); // Debugging log
+        
+                    document.getElementById('bot-response').innerText = botResponse;
+                    updateConversationLog(transcription, botResponse);
+                    textToSpeech(botResponse);
+                } else {
+                    throw new Error('Invalid response format');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        async function textToSpeech(text) {
+            fetch('http://localhost:5000/text-to-speech', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text: text })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.audio_file) {
+                    fetch('http://localhost:5000/get-audio')
+                    .then(response => response.blob())
+                    .then(blob => {
+                        const audioUrl = URL.createObjectURL(blob);
+                        const audioElement = document.getElementById('audio');
+                        audioElement.src = audioUrl;
+                        audioElement.play();
+                    })
+                    .catch(error => {
+                        console.error('Error fetching audio:', error);
+                        alert('An error occurred while fetching the audio file.');
+                    });
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while converting text to speech.');
+            });
+        }
+
+        function updateConversationLog(userMessage, botMessage) {
+            const conversationLog = document.getElementById('conversation-log');
+            const userDiv = document.createElement('div');
+            userDiv.classList.add('user-message');
+            userDiv.textContent = `You: ${userMessage}`;
+            const botDiv = document.createElement('div');
+            botDiv.classList.add('bot-message');
+            botDiv.textContent = `Patient: ${botMessage}`;
+            conversationLog.appendChild(userDiv);
+            conversationLog.appendChild(botDiv);
+        }
+
+        function getRandomRequest() {
+            const requests = [
+                // Additional Tasks on an Overloaded Schedule
+                "We have some new tasks that need attention. Are you available to take on more work?",
+                "Can you handle additional responsibilities despite your current workload?",
+                "Are you open to contributing to this project even though you have a lot on your plate?",
+                
+                // Unrealistic Deadlines
+                "We need this project completed by next week. Is that feasible?",
+                "Can you meet this tight deadline for us?",
+                "Is it possible to finish this task sooner than initially planned?",
+                
+                // Working Overtime or Weekends:
+                "We're facing some delays on the project. Would you be willing to put in extra hours on weekends?",
+                "Can you commit to working overtime to meet the project's deadline?",
+                "Are you available to work on weekends to ensure we stay on track?",
+                
+                // Projects Outside Your Area of Expertise:
+                "We have this project, and we thought you might be a good fit for it. What do you think?",
+                "Would you consider taking on a project that's slightly outside your expertise?",
+                "Are you willing to step outside your comfort zone and work on something new?",
+                
+                // Attending Non-Essential Meetings:
+                "We have a meeting scheduled for later today. Will you be attending?",
+                "Can you make time for this meeting even though you have a lot of work to do?",
+                "Would your presence be beneficial at the meeting, given your workload?",
+                
+                // Traveling for Work:
+                "We need someone to travel to the client's location for this project. Are you available for on-site work?",
+                "Can you accommodate extended travel for this project?",
+                "Is it possible for you to join the team on-site, or do you have commitments that prevent it?",
+                
+                // Assuming Additional Responsibilities:
+                "We're looking to assign additional responsibilities for this project. Are you interested?",
+                "Can you take on these new tasks, even though you're already working on several projects?",
+                "Is there room for you to handle more responsibilities at this time?",
+                
+                // Adopting New Software or Tools:
+                "We're implementing new software for project management. Are you willing to learn and use it?",
+                "Can you integrate this new tool into your workflow, considering your current workload?",
+                "Are you open to transitioning to this software and adapting to it?"
+            ];
+            const randomIndex = Math.floor(Math.random() * requests.length);
+            return requests[randomIndex];
+        }
+
+        function initializeConversation() {
+            const chosenRequest = getRandomRequest();
+            return chosenRequest;
+        }
+        
+        init();
+    </script>
+</body>
+</html>

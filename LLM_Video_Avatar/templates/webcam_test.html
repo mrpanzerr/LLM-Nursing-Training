@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Webcam Example</title>
+</head>
+<body>
+    <h1>Webcam Example</h1>
+    <video id="webcam-video" width="640" height="480" autoplay></video>
+    <button onclick="startWebcam()">Start Webcam</button>
+    <button onclick="stopWebcam()">Stop Webcam</button>
+
+    <script>
+        let videoElement = document.getElementById('webcam-video');
+        let stream;
+
+        async function startWebcam() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                videoElement.srcObject = stream;
+            } catch (err) {
+                console.error("Error accessing webcam:", err);
+            }
+        }
+
+        function stopWebcam() {
+            if (stream) {
+                let tracks = stream.getTracks();
+                tracks.forEach(track => track.stop());
+                videoElement.srcObject = null;
+            }
+        }
+    </script>
+</body>
+</html>

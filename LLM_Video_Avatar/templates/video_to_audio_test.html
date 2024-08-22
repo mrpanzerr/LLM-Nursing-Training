@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Document</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        #main__main-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #videos-container {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 0 10%;
+        }
+
+        .video-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+        }
+
+        .audio-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+            justify-content: center;
+        }
+
+        #main__video {
+            width: 100%;
+            height: auto;
+        }
+
+        #main__video-button {
+            background-color: red;
+            height: 50px;
+            width: 50px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 50px;
+            font-size: .75em;
+            transition-property: box-shadow;
+            transition-duration: .3s;
+            cursor: pointer;
+            box-shadow: gray 0 0 5px 5px;
+            margin-top: 10px;
+        }
+
+        #audio {
+            width: 100%;
+            margin: 20px 0;
+        }
+
+        #text-holder {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 20px; 
+            word-break: break-all; 
+        }
+    </style>
+</head>
+<body>
+    <div id="main__main-container">
+        <div id="videos-container">
+            <div class="video-wrapper">
+                <video id="main__video" playsinline autoplay loop muted="muted">Can't load video :(</video>
+                <div id="main__video-button">Record</div>
+            </div>
+            <div class="audio-wrapper">
+                <audio id="audio" controls>
+                    Your browser does not support the audio element.
+                </audio>
+                <div id="text-holder">Text content goes here</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const videoButton = document.getElementById('main__video-button');
+        const video = document.getElementById('main__video');
+        const audio = document.getElementById('audio');
+        const textHolder = document.getElementById('text-holder');
+        
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        videoButton.onclick = () => {
+            switch (videoButton.textContent) {
+                case 'Record':
+                    videoButton.textContent = 'Stop';
+                    startRecording();
+                    break;
+                case 'Stop':
+                    videoButton.textContent = 'Record';
+                    stopRecording();
+                    break;
+            }
+        }
+        
+        async function init() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: { exact: true },
+                        noiseSuppression: { exact: true },
+                        autoGainControl: { exact: false },
+                        sampleRate: 44100
+                    },
+                    video: true
+                });
+                startWebCamera(stream);
+            } catch (err) {
+                console.log('Error retrieving media device.');
+                console.log(err);
+            }
+        }
+        
+        function startWebCamera(stream) {
+            video.srcObject = stream;
+            window.stream = stream;
+        }
+        
+        function startRecording() {
+            if (video.srcObject === null) {
+                video.srcObject = window.stream;
+            }
+            mediaRecorder = new MediaRecorder(window.stream, {mimeType: 'video/webm; codecs=vp8,opus'});
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+            mediaRecorder.start();
+        }
+        
+        function stopRecording() {
+            mediaRecorder.stop();
+            mediaRecorder.onstop = () => {
+                const videoBlob = new Blob(recordedChunks, {type: 'video/webm'});
+                const videoURL = URL.createObjectURL(videoBlob);
+                video.srcObject = null;
+                textHolder.textContent = videoURL; 
+                saveVideo(videoBlob);
+                recordedChunks = [];
+            };
+        }
+
+        async function saveVideo(videoBlob) {
+            const formData = new FormData();
+            formData.append('video', videoBlob, 'video.webm');
+    
+            try {
+                await fetch('http://localhost:5000/save-video', {
+                    method: 'POST',
+                    body: formData
+                });
+                // Fetch the audio after saving the video
+                fetchAndPlayAudio();
+                audioToText();
+            } catch (err) {
+                console.error('Error saving video:', err);
+            }
+        }
+
+        async function fetchAndPlayAudio() {
+            try {
+                const response = await fetch('http://localhost:5000/get-audio-from-video');
+                if (response.ok) {
+                    const audioBlob = await response.blob();
+                    const audioURL = URL.createObjectURL(audioBlob);
+                    audio.src = audioURL;
+                    audio.play();
+                } else {
+                    console.error('Failed to fetch audio');
+                }
+            } catch (err) {
+                console.error('Error fetching audio:', err);
+            }
+        }
+
+        async function audioToText() {
+            try { 
+                const response = await fetch('http://localhost:5000/get-audio-from-video');
+                if (!response.ok) {
+                    throw new Error('Failed to fetch audio');
+                }
+
+                const audioBlob = await response.blob();
+                const formData = new FormData();
+                formData.append('audio', audioBlob, 'audio.wav');
+                
+                const transcribeResponse = await fetch('http://localhost:5000/audio-to-text', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!transcribeResponse.ok) {
+                    throw new Error('Transcription failed');
+                }
+
+                const transcribeData = await transcribeResponse.json();
+                if (transcribeData.error) {
+                    throw new Error(transcribeData.error);
+                }
+
+                textHolder.textContent = transcribeData.transcription;
+            } catch (error) {
+                textHolder.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        init();
+
+    </script>
+</body>
+</html>

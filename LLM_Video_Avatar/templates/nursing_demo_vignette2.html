@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Violating Academic Integrity</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        body {
+            background-color: #99BADD; /* Carolina blue */
+        }
+
+        #main__main-container {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            justify-content: space-between;
+            height: 100vh;
+            padding: 20px;
+        }
+
+        #video-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+        }
+
+        #main__video {
+            width: 100%;
+            height: auto;
+        }
+
+        #main__video-button {
+            background-color: red;
+            height: 50px;
+            width: 50px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 50px;
+            font-size: .75em;
+            transition-property: box-shadow;
+            transition-duration: .3s;
+            cursor: pointer;
+            box-shadow: gray 0 0 5px 5px;
+            margin-top: 10px;
+        }
+
+        #content-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+            justify-content: center;
+        }
+
+        audio {
+            width: 100%;
+            margin: 20px 0;
+        }
+
+        .chat-container {
+            max-width: 600px;
+            width: 100%;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+
+        .response {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+
+        .conversation-log {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            height: 200px;
+            overflow-y: scroll;
+        }
+    </style>
+</head>
+<body>
+    <div id="main__main-container">
+        <div id="video-container">
+            <video id="main__video" playsinline autoplay loop muted="muted">Can't load video :(</video>
+            <div id="main__video-button">Record</div>
+        </div>
+        <div id="content-container">
+            <audio id="audio" controls>
+                Your browser does not support the audio element.
+            </audio>
+            <div class="chat-container">
+                <div class="response" id="bot-response">
+                    <!-- Bot's response will appear here -->
+                </div>
+                <div class="conversation-log" id="conversation-log">
+                    <!-- Conversation log will appear here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const videoButton = document.getElementById('main__video-button');
+        const video = document.getElementById('main__video');
+        const audio = document.getElementById('audio');
+        const response = document.getElementById('bot-response');
+        const conversationLog = document.getElementById('conversation-log');
+
+        const content = 'You are a knowledgeable AI student teammate assisting with academic writing. Your role is to guide the student on how to use AI tools like CoPilot effectively for their paper, while ensuring adherence to academic integrity. Provide direct and concise advice without rephrasing the student’s queries. Focus on practical guidance and ensure responses are short and relevant.'
+
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        videoButton.onclick = () => {
+            switch (videoButton.textContent) {
+                case 'Record':
+                    videoButton.textContent = 'Stop';
+                    startRecording();
+                    break;
+                case 'Stop':
+                    videoButton.textContent = 'Record';
+                    stopRecording();
+                    break;
+            }
+        }
+        
+        async function init() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: { exact: true },
+                        noiseSuppression: { exact: true },
+                        autoGainControl: { exact: false },
+                        sampleRate: 44100
+                    },
+                    video: true
+                });
+                startWebCamera(stream);
+            } catch (err) {
+                console.log('Error retrieving media device.');
+                console.log(err);
+            }
+        }
+        
+        function startWebCamera(stream) {
+            video.srcObject = stream;
+            window.stream = stream;
+        }
+        
+        function startRecording() {
+            if (video.srcObject === null) {
+                video.srcObject = window.stream;
+            }
+            mediaRecorder = new MediaRecorder(window.stream, {mimeType: 'video/webm; codecs=vp8,opus'});
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+            mediaRecorder.start();
+        }
+        
+        function stopRecording() {
+            mediaRecorder.stop();
+            mediaRecorder.onstop = () => {
+                const videoBlob = new Blob(recordedChunks, {type: 'video/webm'});
+                const videoURL = URL.createObjectURL(videoBlob);
+                video.srcObject = null;
+                saveVideo(videoBlob);
+                recordedChunks = [];
+            };
+        }
+
+        async function saveVideo(videoBlob) {
+            const formData = new FormData();
+            formData.append('video', videoBlob, 'video.webm');
+    
+            try {
+                await fetch('http://localhost:5000/save-video', {
+                    method: 'POST',
+                    body: formData
+                });
+                // Fetch the audio after saving the video
+                await fetchAudio();
+            } catch (err) {
+                console.error('Error saving video:', err);
+            }
+        }
+
+        async function fetchAudio() {
+            try {
+                const response = await fetch('http://localhost:5000/get-audio-from-video');
+                if (response.ok) {
+                    const audioBlob = await response.blob();
+                    audioToText(audioBlob);
+                } else {
+                    console.error('Failed to fetch audio');
+                }
+            } catch (err) {
+                console.error('Error fetching audio:', err);
+            }
+        }
+
+        async function audioToText(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'audio.wav');
+            
+            try {
+                const response = await fetch('http://localhost:5000/audio-to-text', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Transcription failed');
+                }
+
+                const transcribeData = await response.json();
+                if (transcribeData.error) {
+                    throw new Error(transcribeData.error);
+                }
+
+                const transcription = transcribeData.transcription;
+                askGpt(transcription, content);
+            } catch (error) {
+                print(error);
+            }
+        }
+
+        async function askGpt(transcription, content) {
+            const systemMessage = {
+                role: 'system',
+                content: content
+            };
+
+            const exampleMessages = [
+                { role: 'system', content: content },
+                { role: 'user', content: 'Ugh, how do we word this? We’ve been working on writing this off and on all week, and I have a shift at the hospital tomorrow. I wonder if we should dump this all into CoPilot and see what it recommends…' },
+                { role: 'assistant', content: 'That could be a good idea. CoPilot might help us refine and format it better.' },
+                { role: 'user', content: 'Oh, wow, CoPilot wrote that entire section for me. This looks great! I wonder if I should just submit this? I mean, we mostly wrote it, and CoPilot just reorganized it for us…' },
+                { role: 'assistant', content: 'Using CoPilot’s suggestions is helpful, but make sure we’re not violating any academic integrity policies. We should ensure our final submission reflects our own work.' },
+                { role: 'user', content: 'Good point. I’ll double-check the guidelines. Thanks for the advice!' },
+                { role: 'assistant', content: 'No problem! If you need any more help with this or anything else, just let me know.' }
+            ];
+            
+            const messages = [systemMessage, ...exampleMessages, { role: 'user', content: transcription }];
+            
+            try {
+                const response = await fetch('http://localhost:5000/ask-gpt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ messages })
+                });
+
+                if (!response.ok) {
+                    throw new Error('GPT response failed');
+                }
+
+                const data = await response.json();
+
+                if (data && data.response) {
+                    const botResponse = data.response;
+                    console.log('Bot response:', botResponse); // Debugging log
+        
+                    document.getElementById('bot-response').innerText = botResponse;
+                    updateConversationLog(transcription, botResponse);
+                    textToSpeech(botResponse);
+                } else {
+                    throw new Error('Invalid response format');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        async function textToSpeech(text) {
+            fetch('http://localhost:5000/text-to-speech', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text: text })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.audio_file) {
+                    fetch('http://localhost:5000/get-audio')
+                    .then(response => response.blob())
+                    .then(blob => {
+                        const audioUrl = URL.createObjectURL(blob);
+                        const audioElement = document.getElementById('audio');
+                        audioElement.src = audioUrl;
+                        audioElement.play();
+                    })
+                    .catch(error => {
+                        console.error('Error fetching audio:', error);
+                        alert('An error occurred while fetching the audio file.');
+                    });
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while converting text to speech.');
+            });
+        }
+
+        function updateConversationLog(userMessage, botMessage) {
+            const conversationLog = document.getElementById('conversation-log');
+            const userDiv = document.createElement('div');
+            userDiv.classList.add('user-message');
+            userDiv.textContent = `You: ${userMessage}`;
+            const botDiv = document.createElement('div');
+            botDiv.classList.add('bot-message');
+            botDiv.textContent = `Frieda: ${botMessage}`;
+            conversationLog.appendChild(userDiv);
+            conversationLog.appendChild(botDiv);
+        }
+        
+        init();
+    </script>
+</body>
+</html>

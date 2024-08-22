@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Create Talk</title>
+    <style>
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Create Talk</h1>
+    <form id="createTalkForm">
+        <label for="text">Text:</label><br>
+        <textarea id="text" name="text" rows="10" cols="50">
+Hello, who won the world series in 2020?
+        </textarea><br><br>
+        <button type="submit">Create Talk</button>
+    </form>
+
+    <h2>Response</h2>
+    <p id="response"></p>
+    <p id="error" class="error"></p>
+
+    <script>
+        document.getElementById('createTalkForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const text = document.getElementById('text').value;
+            const responseElement = document.getElementById('response');
+            const errorElement = document.getElementById('error');
+            responseElement.innerText = '';
+            errorElement.innerText = '';
+
+            fetch('http://localhost:5000/create-talk', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text: text })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.talk_id) {
+                    responseElement.innerText = 'Talk ID: ' + data.talk_id;
+                } else {
+                    errorElement.innerText = 'Error: ' + (data.error || 'Unknown error occurred');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                errorElement.innerText = 'Error: ' + error.message;
+            });
+        });
+    </script>
+</body>
+</html>

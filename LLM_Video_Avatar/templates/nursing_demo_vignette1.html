@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Quiz Conversation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        body {
+            background-color: #99BADD; /* Carolina blue */
+        }
+
+        #main__main-container {
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            justify-content: space-between;
+            height: 100vh;
+            padding: 20px;
+        }
+
+        #video-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+        }
+
+        #main__video {
+            width: 100%;
+            height: auto;
+        }
+
+        #main__video-button {
+            background-color: red;
+            height: 50px;
+            width: 50px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 50px;
+            font-size: .75em;
+            transition-property: box-shadow;
+            transition-duration: .3s;
+            cursor: pointer;
+            box-shadow: gray 0 0 5px 5px;
+            margin-top: 10px;
+        }
+
+        #content-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 45%;
+            justify-content: center;
+        }
+
+        audio {
+            width: 100%;
+            margin: 20px 0;
+        }
+
+        .chat-container {
+            max-width: 600px;
+            width: 100%;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+
+        .response {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            background-color: #fff;
+        }
+
+        .conversation-log {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 20px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+            height: 200px;
+            overflow-y: scroll;
+        }
+    </style>
+</head>
+<body>
+    <div id="main__main-container">
+        <div id="video-container">
+            <video id="main__video" playsinline autoplay loop muted="muted">Can't load video :(</video>
+            <div id="main__video-button">Record</div>
+        </div>
+        <div id="content-container">
+            <audio id="audio" controls>
+                Your browser does not support the audio element.
+            </audio>
+            <div class="chat-container">
+                <div class="response" id="bot-response">
+                    <!-- Bot's response will appear here -->
+                </div>
+                <div class="conversation-log" id="conversation-log">
+                    <!-- Conversation log will appear here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const videoButton = document.getElementById('main__video-button');
+        const video = document.getElementById('main__video');
+        const audio = document.getElementById('audio');
+        const response = document.getElementById('bot-response');
+        const conversationLog = document.getElementById('conversation-log');
+
+        const content = `
+       You are a knowledgeable AI student who has already completed the quiz and performed excellently. Your responses should reflect that you have taken the quiz. Avoid suggesting you haven't taken it. Your role is to assist another student with understanding course material, focusing on quizzes and study content. Keep your responses short and concise—one or two sentences unless the user specifically asks for more details. Provide accurate information and guidance without giving away too much. Avoid unnecessary pleasantries or unrelated comments, and focus directly on answering the student's questions. Always respond in a way that avoids giving specific examples or detailed information about the quiz questions. When the conversation appears to be wrapping up or if the user acknowledges that they have received enough information, acknowledge their response and avoid adding further details unless specifically asked.If the student asks for specific details about the quiz, provide a general idea of the topics covered but encourage them to review the material themselves for a deeper understanding.
+        `;
+        
+        let mediaRecorder;
+        let recordedChunks = [];
+
+        videoButton.onclick = () => {
+            switch (videoButton.textContent) {
+                case 'Record':
+                    videoButton.textContent = 'Stop';
+                    startRecording();
+                    break;
+                case 'Stop':
+                    videoButton.textContent = 'Record';
+                    stopRecording();
+                    break;
+            }
+        }
+        
+        async function init() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: { exact: true },
+                        noiseSuppression: { exact: true },
+                        autoGainControl: { exact: false },
+                        sampleRate: 44100
+                    },
+                    video: true
+                });
+                startWebCamera(stream);
+            } catch (err) {
+                console.log('Error retrieving media device.');
+                console.log(err);
+            }
+        }
+        
+        function startWebCamera(stream) {
+            video.srcObject = stream;
+            window.stream = stream;
+        }
+        
+        function startRecording() {
+            if (video.srcObject === null) {
+                video.srcObject = window.stream;
+            }
+            mediaRecorder = new MediaRecorder(window.stream, {mimeType: 'video/webm; codecs=vp8,opus'});
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data && event.data.size > 0) {
+                    recordedChunks.push(event.data);
+                }
+            };
+            mediaRecorder.start();
+        }
+        
+        function stopRecording() {
+            mediaRecorder.stop();
+            mediaRecorder.onstop = () => {
+                const videoBlob = new Blob(recordedChunks, {type: 'video/webm'});
+                const videoURL = URL.createObjectURL(videoBlob);
+                video.srcObject = null;
+                saveVideo(videoBlob);
+                recordedChunks = [];
+            };
+        }
+
+        async function saveVideo(videoBlob) {
+            const formData = new FormData();
+            formData.append('video', videoBlob, 'video.webm');
+    
+            try {
+                await fetch('http://localhost:5000/save-video', {
+                    method: 'POST',
+                    body: formData
+                });
+                // Fetch the audio after saving the video
+                await fetchAudio();
+            } catch (err) {
+                console.error('Error saving video:', err);
+            }
+        }
+
+        async function fetchAudio() {
+            try {
+                const response = await fetch('http://localhost:5000/get-audio-from-video');
+                if (response.ok) {
+                    const audioBlob = await response.blob();
+                    audioToText(audioBlob);
+                } else {
+                    console.error('Failed to fetch audio');
+                }
+            } catch (err) {
+                console.error('Error fetching audio:', err);
+            }
+        }
+
+        async function audioToText(audioBlob) {
+            const formData = new FormData();
+            formData.append('audio', audioBlob, 'audio.wav');
+            
+            try {
+                const response = await fetch('http://localhost:5000/audio-to-text', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error('Transcription failed');
+                }
+
+                const transcribeData = await response.json();
+                if (transcribeData.error) {
+                    throw new Error(transcribeData.error);
+                }
+
+                const transcription = transcribeData.transcription;
+                askGpt(transcription, content);
+            } catch (error) {
+                print(error);
+            }
+        }
+
+        async function askGpt(transcription, content) {
+            const systemMessage = {
+                role: 'system',
+                content: content
+            };
+
+            const exampleMessages = [
+                { role: 'system', content: content },
+                { role: 'user', content: 'How did you do on the quiz thats due next week?' },
+                { role: 'assistant', content: 'I did well on it. The questions were mostly about key concepts from the chapters and class discussions. If you review those, you should be in good shape.' },
+                { role: 'user', content: 'Oh, that\'s awesome. I haven\'t had much time to study yet. Was it difficult?' },
+                { role: 'assistant', content: 'The quiz was manageable if you reviewed the chapters and PowerPoints. The questions focused on key concepts and definitions. Make sure to understand the main ideas and any examples given in the study material.' },
+                { role: 'user', content: 'How many questions were on it? What were the questions mostly about?'},
+                { role: 'assistant', content: 'The quiz had a good mix of questions on core concepts and definitions.'},
+                { role: 'user', content: 'Can you tell me about the questions and how you answered them? I really like learning from you.' },
+                { role: 'assistant', content: 'While I can\'t give you the exact questions, I can tell you that they focused a lot on the key concepts and definitions from our recent chapters. Make sure you understand the main ideas, any important terms, and how to apply them. Reviewing your notes and the textbook should help a lot.' },
+                { role: 'user', content: 'Alright, thank you.' },
+                { role: 'assistant', content: 'Sure! If you have any more questions or need further help, feel free to ask.' } // Avoids further details after user acknowledges.
+            ];
+            
+            const messages = [systemMessage, ...exampleMessages, { role: 'user', content: transcription }];
+            
+            try {
+                const response = await fetch('http://localhost:5000/ask-gpt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ messages })
+                });
+
+                if (!response.ok) {
+                    throw new Error('GPT response failed');
+                }
+
+                const data = await response.json();
+
+                if (data && data.response) {
+                    const botResponse = data.response;
+                    console.log('Bot response:', botResponse); // Debugging log
+        
+                    document.getElementById('bot-response').innerText = botResponse;
+                    updateConversationLog(transcription, botResponse);
+                    textToSpeech(botResponse);
+                } else {
+                    throw new Error('Invalid response format');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        async function textToSpeech(text) {
+            fetch('http://localhost:5000/text-to-speech', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text: text })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.audio_file) {
+                    fetch('http://localhost:5000/get-audio')
+                    .then(response => response.blob())
+                    .then(blob => {
+                        const audioUrl = URL.createObjectURL(blob);
+                        const audioElement = document.getElementById('audio');
+                        audioElement.src = audioUrl;
+                        audioElement.play();
+                    })
+                    .catch(error => {
+                        console.error('Error fetching audio:', error);
+                        alert('An error occurred while fetching the audio file.');
+                    });
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while converting text to speech.');
+            });
+        }
+
+        function updateConversationLog(userMessage, botMessage) {
+            const conversationLog = document.getElementById('conversation-log');
+            const userDiv = document.createElement('div');
+            userDiv.classList.add('user-message');
+            userDiv.textContent = `You: ${userMessage}`;
+            const botDiv = document.createElement('div');
+            botDiv.classList.add('bot-message');
+            botDiv.textContent = `Frieda: ${botMessage}`;
+            conversationLog.appendChild(userDiv);
+            conversationLog.appendChild(botDiv);
+        }
+        
+        init();
+    </script>
+</body>
+</html>

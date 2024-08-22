@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Fetch Video</title>
+    <style>
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Fetch Video</h1>
+    <form id="fetchVideoForm">
+        <label for="talkId">Talk ID:</label><br>
+        <input type="text" id="talkId" name="talkId" required><br><br>
+        <button type="submit">Fetch Video</button>
+    </form>
+
+    <h2>Response</h2>
+    <p id="response"></p>
+    <p id="error" class="error"></p>
+    <div id="videoContainer"></div>
+
+    <script>
+        document.getElementById('fetchVideoForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const talkId = document.getElementById('talkId').value;
+            const responseElement = document.getElementById('response');
+            const errorElement = document.getElementById('error');
+            const videoContainer = document.getElementById('videoContainer');
+            responseElement.innerText = '';
+            errorElement.innerText = '';
+            videoContainer.innerHTML = '';
+
+            fetch(`http://localhost:5000/fetch-video?id=${talkId}`)
+                .then(videoResponse => videoResponse.json())
+                .then(videoData => {
+                    if (videoData.video_url) {
+                        const videoElement = document.createElement('video');
+                        videoElement.src = videoData.video_url;
+                        videoElement.controls = true;
+                        videoContainer.appendChild(videoElement);
+                        responseElement.innerText = 'Video fetched successfully.';
+                    } else {
+                        errorElement.innerText = 'Error: ' + (videoData.error || 'Unknown error fetching video');
+                    }
+                })
+                .catch(videoError => {
+                    console.error('Error fetching video:', videoError);
+                    errorElement.innerText = 'Error: ' + videoError.message;
+                });
+        });
+    </script>
+</body>
+</html>

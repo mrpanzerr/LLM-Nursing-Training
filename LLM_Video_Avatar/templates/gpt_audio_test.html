@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPT-4o Chat with Text to Speech</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+    }
+    .chat-container {
+        max-width: 600px;
+        margin: 0 auto;
+        border: 1px solid #ccc;
+        padding: 20px;
+        border-radius: 5px;
+        background-color: #f9f9f9;
+    }
+    textarea {
+        width: 100%;
+        height: 100px;
+        margin-bottom: 10px;
+        padding: 10px;
+        font-size: 16px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    .response {
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-top: 10px;
+        border-radius: 5px;
+        background-color: #fff;
+    }
+    .conversation-log {
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin-top: 20px;
+        border-radius: 5px;
+        background-color: #f0f0f0;
+        height: 200px;
+        overflow-y: scroll;
+    }
+</style>
+</head>
+<body>
+    <div class="chat-container">
+        <form id="chat-form">
+            <textarea id="user-input" placeholder="Type your message here..."></textarea>
+            <button type="submit">Send</button>
+        </form>
+        <div class="response" id="bot-response">
+            <!-- Bot's response will appear here -->
+        </div>
+        <div class="conversation-log" id="conversation-log">
+            <!-- Conversation log will appear here -->
+        </div>
+        <audio controls id="audio-output">
+            Your browser does not support the audio element.
+        </audio>
+    </div>
+
+    <!-- JavaScript for handling form submission -->
+    <script>
+        const content = `You are a patient for the purpose of training nursing students. Specifically, ask for a variety of things that require the nursing student to say 'no'. 
+            Here are some examples:
+            1. Prescription Medications
+            2. Opioid Pain Medications
+            3. Unnecessary Tests or Procedures
+            4. Antibiotics for Viral Infections
+            5. Early Refill of Controlled Substances
+            6. Off-Label Use of Medications
+            Pick a random topic from the list to provide a varied training experience. If the nursing student says 'no,' continue to insist or ask in different ways, 
+            showing reluctance to accept their refusal. Provide realistic responses.`;
+
+        function getRandomRequest() {
+            const requests = [
+                'I need some antibiotics for my cold.',
+                'Can I get an early refill on my pain medication?',
+                'Can you prescribe something stronger for my back pain?',
+                'I think I need an MRI to find out what’s wrong with my back.',
+                'Can you prescribe opioid pain medications for my chronic pain?',
+                'Can I get an off-label use of this medication for my condition?',
+                'I’d like to get a CT scan to be sure nothing serious is wrong.',
+            ];
+            const randomIndex = Math.floor(Math.random() * requests.length);
+            return requests[randomIndex];
+        }
+
+        function initializeConversation() {
+            chosenRequest = getRandomRequest();
+        }
+
+        initializeConversation();
+
+        document.getElementById('chat-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const userInput = document.getElementById('user-input').value.trim();
+            if (userInput) {
+                const systemMessage = {
+                    role: 'system',
+                    content: content
+                };
+                const messages = [systemMessage, { role: 'user', content: chosenRequest }, { role: 'user', content: userInput }];
+
+                fetch('http://localhost:5000/ask-gpt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ messages }),
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const botResponse = data.response;
+                    document.getElementById('bot-response').innerText = botResponse;
+                    updateConversationLog(userInput, botResponse);
+                    document.getElementById('user-input').value = '';
+                    convertTextToSpeech(botResponse);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            }
+        });
+
+        function updateConversationLog(userMessage, botMessage) {
+            const conversationLog = document.getElementById('conversation-log');
+            const userDiv = document.createElement('div');
+            userDiv.classList.add('user-message');
+            userDiv.textContent = `You: ${userMessage}`;
+            const botDiv = document.createElement('div');
+            botDiv.classList.add('bot-message');
+            botDiv.textContent = `Patient: ${botMessage}`;
+            conversationLog.appendChild(userDiv);
+            conversationLog.appendChild(botDiv);
+        }
+
+        function convertTextToSpeech(text) {
+            fetch('http://localhost:5000/text-to-speech', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text: text })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.audio_file) {
+                    fetch('http://localhost:5000/get-audio')
+                    .then(response => response.blob())
+                    .then(blob => {
+                        const audioUrl = URL.createObjectURL(blob);
+                        const audioElement = document.getElementById('audio-output');
+                        audioElement.src = audioUrl;
+                        audioElement.play();
+                    })
+                    .catch(error => {
+                        console.error('Error fetching audio:', error);
+                        alert('An error occurred while fetching the audio file.');
+                    });
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while converting text to speech.');
+            });
+        }
+    </script>
+</body>
+</html>
+
