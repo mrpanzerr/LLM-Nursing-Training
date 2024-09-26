@@ -6,3 +6,5 @@ This repository contains the code for the LLM Video Avatar Training Program, des
 - **Multi-Modal Interactions:** Supports text-to-text, text-to-audio, audio-to-audio, video-to-audio, and video-to-video interactions.
 - **Adaptive Learning:** Utilizes GPT-4o to tailor responses based on student input, simulating varied clinical scenarios.
 - **Scalable and Modular:** Developed initially in Google Colab, then transitioned to a Jupyter Notebook with an HTML interface for easy deployment and integration.
+
+[Gaetano_MIDI_conference_deadline_august_21.docx](https://github.com/user-attachments/files/17150059/Gaetano_MIDI_conference_deadline_august_21.docx)
