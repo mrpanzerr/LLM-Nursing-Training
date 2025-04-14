@@ -10,9 +10,6 @@ This repository contains the code for the LLM Video Avatar Training Program, des
 ## Academic Paper 
 [Conversational LLM Video Avatar Training for Healthcare Students](https://github.com/user-attachments/files/17150059/Gaetano_MIDI_conference_deadline_august_21.docx)
 
-## Conference Presentation
-[MIDI Conference Presentation](https://drive.google.com/file/d/1GJiKltQQCM8L_qXStKQzYKWFWdGfMvS-/view?usp=sharing)
-
 ## Prerequisites
 Before you can run the project, make sure you have the following:
 - **Python 3.x installed**
